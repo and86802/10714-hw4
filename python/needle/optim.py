@@ -25,7 +25,13 @@ class SGD(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        for param in self.params:
+            if param.grad is None:
+                continue
+            grad = param.grad.data + self.weight_decay * param.data
+            u_t = self.momentum * self.u.get(param, 0) + (1 - self.momentum) * grad
+            self.u[param] = u_t
+            param.data -= self.lr * self.u[param]
         ### END YOUR SOLUTION
 
     def clip_grad_norm(self, max_norm=0.25):
@@ -33,7 +39,6 @@ class SGD(Optimizer):
         Clips gradient norm of parameters.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
         ### END YOUR SOLUTION
 
 
@@ -60,5 +65,18 @@ class Adam(Optimizer):
 
     def step(self):
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        self.t += 1
+        for param in self.params:
+            if param.grad is None:
+                continue
+            grad = param.grad.data + self.weight_decay * param.data
+            u_t = self.beta1 * self.m.get(param, 0) + (1 - self.beta1) * grad
+            self.m[param] = u_t
+            v_t = self.beta2 * self.v.get(param, 0) + (1 - self.beta2) * (grad ** 2)
+            self.v[param] = v_t
+            unbiased_u = self.m[param] / (1 - self.beta1 ** self.t)
+            unbiased_v = self.v[param] / (1 - self.beta2 ** self.t)
+            x = self.lr * unbiased_u.data / (unbiased_v.data ** 0.5 + self.eps)
+            param.data -= x.data
+
         ### END YOUR SOLUTION

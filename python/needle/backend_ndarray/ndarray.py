@@ -218,7 +218,7 @@ class NDArray:
             )
             return out
 
-    def as_strided(self, shape, strides):
+    def as_strided(self, shape, strides, offset=0):
         """Restride the matrix without copying memory."""
         assert len(shape) == len(strides)
         return NDArray.make(
@@ -247,8 +247,49 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        # Calculate the total number of elements in the current shape and new shape
+        size = prod(new_shape)
+        # shape inference
+        if -1 in new_shape:
+            new_shape = tuple(int(self.size / abs(size)) if   i == -1
+                                                         else i
+                                                         for  i in new_shape)
+        # `self.size` is a getter of # of elements in a tensor.
+        elif self.size != size:
+            raise ValueError('NDArray dimension mismatch')
+
+        if not self.is_compact():
+            raise ValueError('NDArray not compact')
+        
+        return self.as_strided(new_shape, self.compact_strides(new_shape))
+
+
+        # current_size = 1 
+        # for dim in self.shape:
+        #     current_size *= dim
+        # new_size = 1 
+        # for dim in new_shape:
+        #     new_size *= dim
+
+        # if -1 in new_shape:
+        #     new_shape = tuple(int(current_size / abs(new_size)) if i == -1 else i for i in new_shape)
+        #     # Check that the total number of elements matches
+        #     # print(f"Reshape: current shape: {self.shape}, new_shape: {new_shape}, current size: {current_size}, new size: {new_size}")
+        # elif current_size != new_size:
+        #     raise ValueError("Cannot reshape array: total number of elements must remain the same.")
+
+        # # Check if the matrix is compact (memory contiguity)
+        # if not self.is_compact():
+        #     raise ValueError("Cannot reshape a non-compact array.")
+
+        # return self.make(
+        #     shape=new_shape, 
+        #     device=self.device, 
+        #     handle=self._handle,
+        #     offset=self._offset
+        # )
         ### END YOUR SOLUTION
+
 
     def permute(self, new_axes):
         """
@@ -272,7 +313,13 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.make(
+            shape=tuple([self.shape[i] for i in new_axes]),
+            strides=tuple([self.strides[i] for i in new_axes]),
+            device=self._device,
+            handle=self._handle,
+            offset=self._offset
+        ).compact()
         ### END YOUR SOLUTION
 
     def broadcast_to(self, new_shape):
@@ -296,10 +343,27 @@ class NDArray:
         """
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
-        ### END YOUR SOLUTION
+        
+        assert len(new_shape) >= len(self.shape), "Cannot broadcast to fewer dimensions"
 
-    ### Get and set elements
+        padded_shape = [1] * (len(new_shape) - len(self.shape)) + list(self.shape)
+        padded_strides = [0] * (len(new_shape) - len(self.shape)) + list(self.strides)
+
+        assert all(shape == new_shape[i] for i, shape in enumerate(padded_shape) if shape != 1), "Mismatched broadcast dimension"
+
+        for i in range(len(new_shape)):
+            if padded_shape[i] != 1 or new_shape[i] == 1:
+                continue
+            padded_strides[i] = 0
+
+        return NDArray.make(
+            new_shape,
+            strides=tuple(padded_strides),
+            device=self._device,
+            handle=self._handle,
+            offset=self._offset,
+        ).compact()
+        # ### END YOUR SOLUTION
 
     def process_slice(self, sl, dim):
         """Convert a slice to an explicit start/stop/step"""
@@ -363,7 +427,13 @@ class NDArray:
         assert len(idxs) == self.ndim, "Need indexes equal to number of dimensions"
 
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        return self.make(
+            shape=tuple((s.stop - s.start + s.step - 1) // s.step for s in idxs),
+            strides=tuple(s.step * stride for stride, s in zip(self.strides, idxs)),
+            device=self._device,
+            handle=self._handle,
+            offset=self._offset + int(math.fsum(s.start * stride for stride, s in zip(self.strides, idxs)))
+        )
         ### END YOUR SOLUTION
 
     def __setitem__(self, idxs, other):
@@ -398,6 +468,7 @@ class NDArray:
         out = NDArray.make(self.shape, device=self.device)
         if isinstance(other, NDArray):
             assert self.shape == other.shape, "operation needs two equal-sized arrays"
+
             ewise_func(self.compact()._handle, other.compact()._handle, out._handle)
         else:
             scalar_func(self.compact()._handle, other, out._handle)
@@ -573,7 +644,18 @@ class NDArray:
         Note: compact() before returning.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        offset = 0
+        prod = 1
+        for i in reversed(range(len(self.shape))):
+            if i in axes:
+                offset += (self.shape[i] - 1) * prod
+            prod *= self.shape[i]
+        strides = tuple([s if i not in axes else -s for i, s in enumerate(self.strides)])
+        return NDArray.make( self.shape,
+                            strides=strides,
+                            device=self._device,
+                            handle=self._handle,
+                            offset=offset).compact()
         ### END YOUR SOLUTION
 
     def pad(self, axes):
@@ -583,7 +665,12 @@ class NDArray:
         axes = ( (0, 0), (1, 1), (0, 0)) pads the middle axis with a 0 on the left and right side.
         """
         ### BEGIN YOUR SOLUTION
-        raise NotImplementedError()
+        new_shape = tuple([dim + pad[0] + pad[1] for dim, pad in zip(self.shape, axes)])
+        out = NDArray.make(new_shape, device=self.device)
+        out.fill(0.)
+        slices = tuple(slice(pad[0], dim + pad[0]) for dim, pad in zip(self.shape, axes))
+        out[slices] = self
+        return out
         ### END YOUR SOLUTION
 
 def array(a, dtype="float32", device=None):
@@ -633,3 +720,14 @@ def sum(a, axis=None, keepdims=False):
 
 def flip(a, axes):
     return a.flip(axes)
+
+def matmul(a, b):
+    return a @ b
+
+def permute(array, axes):
+    return array.permute(axes)
+
+# def summation(a, axis=None, keepdims=False):
+#     return a.sum(axis=axis, keepdims=keepdims)
+
+

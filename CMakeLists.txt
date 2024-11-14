@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.5)
 project(needle C CXX)
-cmake_policy(SET CMP0146 OLD)
 
 # find correct version of Python
-execute_process(COMMAND python3-config --prefix
-  OUTPUT_VARIABLE Python_ROOT_DIR)
+set(Python_EXECUTABLE "/home/admin/miniconda3/envs/10714/bin/python")
 find_package(Python COMPONENTS Development Interpreter REQUIRED)
 include_directories(${Python_INCLUDE_DIRS})
+
 
 # find pybind
 execute_process(COMMAND python3 -m pybind11 --cmakedir
