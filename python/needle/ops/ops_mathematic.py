@@ -555,7 +555,7 @@ class Conv(TensorOp):
         _W = (W - K) // self.stride + 1
         out_shape = (N, _H, _H, C_out)
         outer_dim = N * _H * _W
-        A = A.as_strided(shape=(N, _H, _H, K, K, C_in), 
+        A = A.as_strided(shape=(N, _H, _W, K, K, C_in), 
                     strides=(Ns, (Hs * self.stride), (Ws * self.stride), Hs, Ws, Cs)). \
                     compact(). \
                     reshape((outer_dim, inner_dim))
